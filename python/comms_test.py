@@ -1,31 +1,40 @@
-from serial import Serial
+from serial import Serial, EIGHTBITS, PARITY_NONE, STOPBITS_ONE
 from time import sleep
 import base64
 import numpy as np
 from numpy import int32
 from ctypes import c_int32, c_uint32
-
-class Int32:
-	@staticmethod
-	def insert(i):
-		return i.to_bytes(4, byteorder='big')
-
-	@staticmethod
-	def extract(b):
-		return int.from_bytes(b[:4], byteorder='big'), b[4:]
-
+from serialize import *
+from packet import Packet, start_tx, start_data, end_data, end_tx
+from threading import Thread
+from messages import Test_Outbound
 
 ard = Serial('COM7', baudrate=115200)
-ard.set_buffer_size(8, 8)
+ard.bytesize=EIGHTBITS
+ard.parity=PARITY_NONE
+ard.stopbits=STOPBITS_ONE
+# ard.set_buffer_size(8, 8)
+
+def read_loop(cls, ser):
+    while True:
+        try:
+            # ser.read_until(expected=start_tx)
+            # print(cls.from_bytes(ser.read_until(expected=end_tx)).__repr__())
+            print(ser.read(2))
+        except:
+            pass
+
+read_thread = Thread(target = read_loop, args=[Packet, ard], daemon=True)
 
 def main():
-    b64bytes = base64.standard_b64encode(int(89).to_bytes(4, byteorder='big'))
-    ard.write(bytearray([b'\x01', b64bytes, b'\x02', b'0.0', b'\x03', b'\x04']))
-    # ard.write(b"asdf")
-    print(ard.read(ard.in_waiting))
+    spec = (Int32, Float)
+    # packet = Packet(100, serialize(spec, [89, 9.909]))
+    packet = Test_Outbound(89, 9.09).pack()
+    packet.write_to(ard)
+    print(f'I printed: {packet.to_bytes()}')
     sleep(1)
 
 if __name__ == "__main__":
-    
+    read_thread.start()
     while True:
         main()

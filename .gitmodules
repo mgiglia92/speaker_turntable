@@ -1,0 +1,3 @@
+[submodule "serial-packets"]
+	path = serial-packets
+	url = git@github.com:robotics-crash-course/serial-packets.git

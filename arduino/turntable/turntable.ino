@@ -18,8 +18,8 @@ struct StateMachine
 {
     State state;
     int bytes_available=0;
-    char incoming[100];
-    int index=0;
+    char incoming[500];
+    uint16_t index=0;
     bool start_tx_found=false;
     int bytes_read_this_cycle=0;
 };
@@ -28,7 +28,7 @@ StateMachine sm;
 
 void setup()
 {
-    Serial.begin(115200);
+    Serial.begin(115200, SERIAL_8N1);
     sm.state=BYTES_AVAILABLE;
     sm.index = 0;
 }
@@ -37,7 +37,13 @@ void loop()
 {
     loop_comms_state_machine();
     // Serial.println("hello world");
-    delay(100);
+    // Serial.write('\x04');
+    // Serial.write('\x04');
+    // Serial.write('\x04');
+    // Serial.write('\x04');
+    // Serial.write('\x04');
+    // Serial.write('\x04');
+    // Serial.write('\x04');
 }
 
 
@@ -46,7 +52,7 @@ void loop_comms_state_machine()
     switch(sm.state)
     {
         case BYTES_AVAILABLE:
-            Serial.println("BYTES AVAIL");
+            // Serial.println("BYTES AVAIL");
             if(Serial.available()==0)
             { 
                 break;
@@ -61,23 +67,27 @@ void loop_comms_state_machine()
             for (int i = 0; i<sm.bytes_available; i++)
             {
                 sm.incoming[sm.index] = Serial.read();
-                Serial.write(sm.incoming[sm.index]);
+                // Serial.write(sm.incoming[sm.index]);
+                // Found end of message, decode
+                if (sm.incoming[sm.index] == end_tx)
+                {
+                    sm.state = SEND_TO_DECODE;
+                    Serial.write("FOUND END TX");
+                    break;
+                }            
+                // All bytes read, end of msg not found
                 sm.index++;
                 sm.bytes_read_this_cycle++;
+                
+                if (sm.bytes_read_this_cycle == sm.bytes_available)
+                {
+                    sm.state = RESET_FOR_CONTINUING_MSG;
+                    break;
+                }
             }
-            // Found end of message, decode
-            if (sm.incoming[sm.index-1] == end_tx)
-            {
-                sm.state = SEND_TO_DECODE;
-                break;
-            }
+            
 
-            // All bytes read, end of msg not found
-            if (sm.bytes_read_this_cycle == sm.bytes_available)
-            {
-                sm.state = RESET_FOR_CONTINUING_MSG;
-                break;
-            }
+
 
             break;
 
@@ -85,22 +95,61 @@ void loop_comms_state_machine()
         
             Serial.println("SEND TO DECODE");
             // Do decoding
-            Serial.print("IN DECODING");
+            Serial.write(sm.incoming, strlen(sm.incoming));
+            // Serial.write("IN DECODING");
+            int start_tx_loc    =0;
+            int start_data_loc  =0;
+            int end_data_loc    =0;
+            int end_tx_loc      =0;
+            // Get locations of control chars
+            for(int i=0; i<strlen(sm.incoming); i++)
+            {
+                if(sm.incoming[i] == start_tx){ start_tx_loc = i;}
+                if(sm.incoming[i] == start_data){ start_data_loc = i;}
+                if(sm.incoming[i] == end_data){ end_data_loc = i;}
+                if(sm.incoming[i] == end_tx){ end_tx_loc = i;}
+            }
+
+            Serial.write(start_tx_loc);
+            // // Get bytes between start_tx and start_data for msg id
+            // byte id[10];
+            // int id_index=0;
+            // for(int i=start_tx_loc; i<start_data_loc; i++)
+            // {
+            //     id[id_index] = sm.incoming[i];
+            //     id_index++;
+            // }
+            
+            // // Get bytes between start_data and end_data for msg data
+            // byte data[32];
+            // int data_index=0;
+            // for(int i=start_data_loc; i<end_data_loc; i++)
+            // {
+            //     data[data_index] = sm.incoming[i];
+            //     data_index++;
+            // }
+
+            // Serial.print('ID: ');
+            // Serial.write(id, strlen(id));
+            // Serial.print(" | DATA: ");
+            // Serial.write(data, strlen(data));
+
             sm.state = RESET_FOR_NEW_MSG;
             break;
 
         case RESET_FOR_CONTINUING_MSG:
-            Serial.println("RESET CONTINUE MSG");
+            // Serial.println("RESET CONTINUE MSG");
             sm.bytes_read_this_cycle=0;
             sm.state=BYTES_AVAILABLE;
             break;
         
         case RESET_FOR_NEW_MSG:
-            Serial.println("RESET FOR NEW MSG");
+            // Serial.println("RESET FOR NEW MSG");
             sm.index=0;
             sm.bytes_available=0;
             sm.bytes_read_this_cycle=0;
-            sm.incoming[0] = '\0';
+            // sm.incoming[0] = '\0';
+            memset(sm.incoming, byte('\0'), sizeof(sm.incoming)*sizeof(sm.incoming[0]));
             sm.state=BYTES_AVAILABLE;
             break;
 
