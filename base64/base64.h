@@ -23,7 +23,9 @@
 
 #include <stdint.h>
 
+void fcn(int i);
 int base64_binlength(char *str, uint8_t strict);
 int base64dec(void *dest, const char *b64str, uint8_t strict);
+void base64enc(char *dest, const void *src, uint16_t length);
 
 #endif /*BASE64_DEC_H_*/
