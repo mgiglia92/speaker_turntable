@@ -72,6 +72,18 @@ union int8_to_int32{
 MessageInfo mi;
 StateMachine sm;
 
+// --------------- Motor control information ---------------- //
+struct MotorControlState
+{
+    bool enabled = false;
+    uint32_t steps_per_degree = 100; // 100 steps per degree of rotation of the turntable
+    int32_t current_steps = 0; // in steps
+    int32_t current_deg = 0; // in degrees
+    int32_t desired_deg = 0; // in degrees
+};
+MotorControlState motor_state;
+// ---------------------------------------------------------- //
+
 void setup()
 {
     pinMode(13, OUTPUT);
@@ -165,10 +177,10 @@ void loop_comms_state_machine()
             // // Serial.write(sm.incoming, strlen(sm.incoming));
             // // Serial.flush();
             // // // Serial.write("IN DECODING");
-            for (int i = 0; i <= 16; i++)
-            {
-                Serial.write(sm.incoming[i]);
-            }
+            // for (int i = 0; i <= 16; i++)
+            // {
+            //     Serial.write(sm.incoming[i]);
+            // }
 
             // Get locations of control chars
             for (int i = 0; i <= 16; i++)
@@ -177,7 +189,7 @@ void loop_comms_state_machine()
                 {
                     mi.start_tx_loc = i;
                     // Serial.print("FOUND TX LOC\n strlen: ");
-                    Serial.println(strlen(sm.incoming));
+                    // Serial.println(strlen(sm.incoming));
                 }
                 if (sm.incoming[i] == start_data)
                 {
@@ -215,11 +227,11 @@ void loop_comms_state_machine()
                 data_index++;
             }
 
-            Serial.print("ID: ");
-            Serial.write(mi.id, 4);
-            Serial.print(" | DATA: ");
-            Serial.write(mi.data, 4);
-            Serial.println();
+            // Serial.print("ID: ");
+            // Serial.write(mi.id, 4);
+            // Serial.print(" | DATA: ");
+            // Serial.write(mi.data, 4);
+            // Serial.println();
             sm.state = RESET_FOR_NEW_MSG;
 
             //Decoding now
@@ -229,8 +241,8 @@ void loop_comms_state_machine()
             {
                 id_union.buffer[i]=mi.id[i];
             }
-            Serial.print("Union for id as int32: ");
-            Serial.println(id_union.value);
+            // Serial.print("Union for id as int32: ");
+            // Serial.println(id_union.value);
 
             //get 4 bytes for data, push into int32_t (notice signed not unsigned)
             int8_to_int32 data_union;
@@ -238,8 +250,8 @@ void loop_comms_state_machine()
             {
                 data_union.buffer[i]=mi.data[i];
             }
-            Serial.print("Union for data as int32: ");
-            Serial.println(data_union.value);
+            // Serial.print("Union for data as int32: ");
+            // Serial.println(data_union.value);
 
             //get 4 bytes for checksum, push into int32_t
             int8_to_int32 crc_union;
@@ -247,12 +259,56 @@ void loop_comms_state_machine()
             {
                 crc_union.buffer[i]=mi.data[i];
             }
-            Serial.print("Union for crc as int32: ");
-            Serial.println(crc_union.value);
+            // Serial.print("Union for crc as int32: ");
+            // Serial.println(crc_union.value);
 
             // Verify checksum (not implemented yet)
 
             // Check message type and act accordingly
+            switch (id_union.value)
+            {
+                case MoveBy:
+                    // Check if motor is enabled, if not, ignore command and send error message back
+                    if(motor_state.enabled == false)
+                    {
+                        Serial.println("MOTOR DISABLED - IGNORING MOVE COMMAND"); //UPdate this to use comms protocol
+                        break;
+                    }
+                    if(motor_state.enabled == true)
+                    {
+                        // Update desired position
+                        motor_state.desired_deg = motor_state.desired_deg + data_union.value;
+                        Serial.print("Updated desired position to: ");
+                        Serial.println(motor_state.desired_deg);
+                    }
+                    Serial.print("MOVE BY ");
+                    Serial.println(data_union.value);
+                    break;
+                
+                case Position:
+                    Serial.print("POSITION ");
+                    Serial.println(data_union.value);
+                    break;
+                case EStop:
+                    Serial.println("EMERGENCY STOP");
+                    break;
+                case MotorEnable:
+                    Serial.println("MOTOR ENABLE");
+                    Serial.println(data_union.value);
+                    if(data_union.value == 1)
+                    {
+                        motor_state.enabled = true;
+                    }
+                    else
+                    {
+                        motor_state.enabled = false;
+                    }
+                    break;
+                case Ack:
+                    Serial.println("ACKNOWLEDGEMENT");
+                    break;
+
+            }
         }
         break;
 
