@@ -37,6 +37,8 @@ def main():
     packet = Test_Outbound(float(89), float(9.09)).pack()
     packet = MoveBy(-10).pack()
     packet.write_to(ard)
+    packet = MotorEnable(1).pack()
+    packet.write_to(ard)
     # print(f'I printed: {packet.to_bytes()}')
     sleep(1)
 
