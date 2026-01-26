@@ -5,6 +5,11 @@ start_data = b'$' # STX (start of text)
 end_data =   b'%' # ETX (end of text)
 end_tx =     b'&' # EOT (end of transmission)
 
+"""
+Message Protocol is:
+# <4 bytes packet id> $ <4 data bytes> % <4 bytes checksum> &
+"""
+
 class Packet:
 	def __init__(self, p_id = None, data = None):
 		self.id_ = p_id or 0
