@@ -250,32 +250,9 @@ void loop_comms_state_machine()
             Serial.print("Union for crc as int32: ");
             Serial.println(crc_union.value);
 
-            // char b64_buffer[16];
-            // uint8_t bin_buffer[16];
-            // for(int i=0; i < 16; i++)
-            // {
-            //     bin_buffer[i]=0;
-            // }
+            // Verify checksum (not implemented yet)
 
-            // for(int i=0; i <= strlen(mi.id); i++)
-            // {
-            //     b64_buffer[i] = mi.id[i];
-            // }
-            // uint8_t strict=1;
-            // // fcn(1);
-            // // base64_binlength(&b64_buffer[0], 1);
-            // Serial.print("\n bin_buffer before: ");
-            // for(int i=0; i<10; i++)
-            // {
-            //     Serial.write(bin_buffer[i]);
-            // }
-            // base64dec(bin_buffer, b64_buffer, 1);
-            // Serial.print("\n bin_buffer after: ");
-            // for(int i=0; i<10; i++)
-            // {
-            //     Serial.write(bin_buffer[i]);
-            // }
-            // Serial.print("\n!");
+            // Check message type and act accordingly
         }
         break;
 
