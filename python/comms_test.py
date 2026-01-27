@@ -18,13 +18,13 @@ ard.parity=PARITY_NONE
 ard.stopbits=STOPBITS_ONE
 # ard.set_buffer_size(256, 256)
 
-def read_loop(cls, ser: Serial):
+def read_loop(cls: Packet, ser: Serial):
     while True:
         try:
-            # ser.read_until(expected=start_tx)
-            # print(cls.from_bytes(ser.read_until(expected=end_tx)).__repr__())
-            # print(ser.read_until("!"))
-            print(ser.read(16))
+            ser.read_until(expected=start_tx)
+            print(cls.from_bytes(ser.read_until(expected=end_tx)).__repr__())
+            # print(ser.read_until(end_tx))
+            # print(ser.read(16))
             # print(ser.read_until(b"bin_buffer"))
         except:
             pass
@@ -35,9 +35,12 @@ def main():
     spec = (Int32, Float)
     # packet = Packet(100, serialize(spec, [89, 9.909]))
     packet = Test_Outbound(float(89), float(9.09)).pack()
-    packet = MoveBy(-10).pack()
-    packet.write_to(ard)
+    
     packet = MotorEnable(1).pack()
+    packet.write_to(ard)
+    packet = MoveBy(int(-1)).pack()
+    packet.write_to(ard)
+    packet = Position(int(0)).pack()
     packet.write_to(ard)
     # print(f'I printed: {packet.to_bytes()}')
     sleep(1)

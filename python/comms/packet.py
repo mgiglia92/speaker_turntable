@@ -3,7 +3,9 @@
 #  * SPDX-License-Identifier: GPL-3.0-or-later
 #  */
 
+from ctypes import c_int32, c_uint32
 from serialize import *
+import struct
 
 start_tx =   b'#' # SOH (start of heading)
 start_data = b'$' # STX (start of text)
@@ -18,13 +20,13 @@ Message Protocol is:
 class Packet:
 	def __init__(self, p_id = None, data = None):
 		self.id_ = p_id or 0
-		self.data_ = data or ''
+		self.data_ = data or 0
 
 	def checksum(self, cksum = None):
 		data_bytes=0
 		if self.data_ < 0:
 			data_bytes = self.data_.to_bytes(4, 'little', signed=True)
-		elif self.data_ > 0:
+		elif self.data_ >= 0:
 			data_bytes = self.data_.to_bytes(4, 'little', signed=False)
 		return data_bytes
 
@@ -40,7 +42,7 @@ class Packet:
 		data_bytes=0
 		if self.data_ < 0:
 			data_bytes = self.data_.to_bytes(4, 'little', signed=True)
-		elif self.data_ > 0:
+		elif self.data_ >= 0:
 			data_bytes = self.data_.to_bytes(4, 'little', signed=False)
 		return start_tx + \
 			self.id_.to_bytes(4, 'little') + \
@@ -51,22 +53,36 @@ class Packet:
 			end_tx
 
 	@classmethod
-	def from_bytes(cls, b):
+	def from_bytes(cls, b: bytearray):
 		if b[0] == start_tx:
 			b = b[1:]
 		b = b[:b.find(end_tx)]
-		b64_id, remainder = b.split(start_data, 1)
-		b64_data, cksum = remainder.split(end_data, 1)
+		bid, remainder = b.split(start_data, 1)
+		bdata, cksum = remainder.split(end_data, 1)
 		if cksum[-1:] == end_tx:
 			cksum = cksum[:-1]
-
-		p_id, _ = deserialize((Int32, ), base64.b64decode(b64_id))
-		p = cls(p_id[0], base64.b64decode(b64_data))
-
-		if not p.checksum(cksum):
-			raise Exception('checksum failed!')
-
+		
+		p_id 	= struct.unpack('I', bid)
+		p_data	= struct.unpack('i', bdata)
+		p = cls(p_id[0], p_data[0])
 		return p
+	
+	# def from_bytes(cls, b):
+	# 	if b[0] == start_tx:
+	# 		b = b[1:]
+	# 	b = b[:b.find(end_tx)]
+	# 	b64_id, remainder = b.split(start_data, 1)
+	# 	b64_data, cksum = remainder.split(end_data, 1)
+	# 	if cksum[-1:] == end_tx:
+	# 		cksum = cksum[:-1]
+
+	# 	p_id, _ = deserialize((Int32, ), base64.b64decode(b64_id))
+	# 	p = cls(p_id[0], base64.b64decode(b64_data))
+
+	# 	if not p.checksum(cksum):
+	# 		raise Exception('checksum failed!')
+
+	# 	return p
 
 	def write_to(self, ser):
 		ser.write(self.to_bytes())
