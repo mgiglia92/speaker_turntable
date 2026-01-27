@@ -1,3 +1,8 @@
+# /**
+#  * Copyright (c) 2023  Catherine Van West <catherine.vanwest@cooper.edu>
+#  * SPDX-License-Identifier: GPL-3.0-or-later
+#  */
+
 from comms.packet import Packet
 
 class Message:

@@ -12,7 +12,7 @@ from comms.packet import *
 from threading import Thread
 from messages import Test_Outbound
 
-ard = Serial('COM4', baudrate=115200)
+ard = Serial('COM7', baudrate=115200)
 ard.bytesize=EIGHTBITS
 ard.parity=PARITY_NONE
 ard.stopbits=STOPBITS_ONE
