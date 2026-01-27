@@ -1,5 +1,14 @@
-#include <base64.h>
+// --------------------- Timer Interrupt stuff -------------------- //
 
+/* Set Timer1 use, note, this will only work on Arduino UNO at the moment. 
+ * And this sketch CANNOT use the Servo Library as that would use Timer1.
+ */
+#define USE_TIMER_1 true
+// #define TIMER1_FREQ_HZ 1000000.0
+#include <TimerInterrupt.h>
+// --------------------------------------------------------------//
+
+// ------------------ Serial Comms Related -------------//
 static const char start_tx = '#';   // SOH (start of heading)
 static const char start_data = '$'; // STX (start of text)
 static const char end_data = '%';   // ETX (end of text)
@@ -7,7 +16,9 @@ static const char end_tx = '&';     // EOT (end of transmission)
 
 #define SERIAL_RX_BUFFER_SIZE 256
 #define SERIAL_TX_BUFFER_SIZE 256
+// --------------------------------------------------------------//
 
+// -------------- State Machine Related --------------------//
 enum State
 {
     BYTES_AVAILABLE,
@@ -27,7 +38,10 @@ struct StateMachine
     bool start_tx_found = false;
     int bytes_read_this_cycle = 0;
 };
+StateMachine sm;
+// --------------------------------------------------------------//
 
+// ------------------ Comms Message Related -------------------//
 struct MessageInfo
 {
 
@@ -40,6 +54,7 @@ struct MessageInfo
     char crc[4];
 
 };
+MessageInfo mi;
 
 struct MessagePrototype
 {
@@ -58,6 +73,14 @@ enum MessageTypes
     MotionComplete              = 3
 };
 
+const static uint16_t queue_length = 16;
+struct OutBoundMessageQueue
+{
+    MessagePrototype queue[queue_length];
+    int16_t index=0;
+};
+
+
 union uint8_to_uint32{
     uint32_t value;
     char buffer[4];
@@ -69,55 +92,163 @@ union int8_to_int32{
 };
 
 
-MessageInfo mi;
-StateMachine sm;
+void send_message(uint32_t id, int32_t data)
+{
+    // Place id into union
+    uint8_to_uint32 id_union;
+    id_union.value = id;
+
+    // Place data into union
+    int8_to_int32 data_union;
+    data_union.value = data;
+
+    // buffer byte array
+    const size_t out_buf_size = 16;
+    char out_buf[out_buf_size];
+
+    // Set values in buffer
+    out_buf[0] = start_tx;
+    // id
+    out_buf[1] = id_union.buffer[0];
+    out_buf[2] = id_union.buffer[1];
+    out_buf[3] = id_union.buffer[2];
+    out_buf[4] = id_union.buffer[3];
+    
+    out_buf[5] = start_data;
+    // data
+    out_buf[6] = data_union.buffer[0];
+    out_buf[7] = data_union.buffer[1];
+    out_buf[8] = data_union.buffer[2];
+    out_buf[9] = data_union.buffer[3];
+
+    out_buf[10] = end_data;
+    // data again as crc (proper crc not implemented yet)
+    out_buf[11] = data_union.buffer[0];
+    out_buf[12] = data_union.buffer[1];
+    out_buf[13] = data_union.buffer[2];
+    out_buf[14] = data_union.buffer[3];
+    
+    out_buf[15] = end_tx;
+
+    // Print the out buffer to the serial port
+    for(int i=0; i<out_buf_size; i++)
+    {
+        Serial.write(out_buf[i]);
+    }
+    Serial.flush();
+
+}
+// --------------------------------------------------------------//
 
 // --------------- Motor control information ---------------- //
+struct MotorConfig
+{
+    uint8_t step_pin = 5;
+    uint8_t dir_pin = 6;
+    uint8_t ena_pin = 7;
+    uint32_t steps_per_degree = 10; // 10 steps per degree of rotation of the turntable
+    unsigned long step_interval = 20; // ms
+};
+
+MotorConfig motor_config;
+
 struct MotorControlState
 {
-    bool enabled = false;
-    uint32_t steps_per_degree = 100; // 100 steps per degree of rotation of the turntable
-    int32_t current_steps = 0; // in steps
-    int32_t current_deg = 0; // in degrees
-    int32_t desired_deg = 0; // in degrees
+    volatile bool enabled = false;
+    volatile int32_t current_steps = 0; // in steps
+    volatile int32_t current_deg = 0; // in degrees
+    volatile int32_t desired_deg = 0; // in degrees
+    volatile bool estop = false;
 };
-MotorControlState motor_state;
+
+volatile MotorControlState motor_state;
+
+void motor_setup()
+{
+    pinMode(motor_config.step_pin, OUTPUT);
+    pinMode(motor_config.dir_pin, OUTPUT);
+}
+
+void cycle_motor_control(); //Forward declaration
 // ---------------------------------------------------------- //
 
+
+// ----------------------- Standard Arduino Stuff ----------------//
 void setup()
 {
-    pinMode(13, OUTPUT);
     Serial.begin(115200, SERIAL_8N1);
+    motor_setup();
+    
     sm.state = BYTES_AVAILABLE;
     sm.index = 0;
+
+    ITimer1.init();
+    if (ITimer1.attachInterruptInterval(motor_config.step_interval, cycle_motor_control))
+    {
+        Serial.print(F("Starting  ITimer1 OK, millis() = ")); Serial.println(millis());
+    }
+    else
+        Serial.println(F("Can't set ITimer1. Select another freq. or timer"));
 }
+
 
 void loop()
 {
-    // while(Serial.available())
-    // {
-    //     Serial.write(Serial.read());
-    //     Serial.flush();
-    // }    
-    // digitalWrite(13, !digitalRead(13));
-    // Serial.write("LOOP\n");
-    // Serial.println(sm.state);
-    // Serial.flush();
-    loop_comms_state_machine();
+    cycle_comms_state_machine();
+}
 
-    // delay(100);
-    // Serial.println("hello world");
-    // Serial.write('\x04');
-    // Serial.write('\x04');
-    // Serial.write('\x04');
-    // Serial.write('\x04');
-    // Serial.write('\x04');
-    // Serial.write('\x04');
-    // Serial.write('\x04');
+// ---------------------------------------------------------- //
+
+void cycle_motor_control()
+{
+    // Get motor error, (desired - current)
+    /* Note that we do control in the steps domain, so desired deg is first converted
+     * into steps using the steps_per_degree config parameter.
+     * Then an error_steps is calculated and used to determine which way to step the motor
+     * The enable pin is set before any control, and control only happens if motor is enabled
+    */
+    int32_t desired_steps = motor_state.desired_deg * motor_config.steps_per_degree;
+    int32_t error_steps = desired_steps - motor_state.current_steps ;
+    
+    if(motor_state.enabled)
+    {
+        // Enable Motor
+        digitalWrite(motor_config.ena_pin, HIGH);
+
+        if(error_steps > 0)
+        {
+            // Set dir pin
+            digitalWrite(motor_config.dir_pin, LOW);
+            delayMicroseconds(100);
+            // Step one step
+            digitalWrite(motor_config.step_pin, LOW);
+            delayMicroseconds(100);
+            digitalWrite(motor_config.step_pin, HIGH);
+            delayMicroseconds(100);
+            motor_state.current_steps++;
+        }
+        else if(error_steps < 0)
+        {
+            digitalWrite(motor_config.dir_pin, HIGH);
+            delayMicroseconds(100);
+            // Step one step
+            digitalWrite(motor_config.step_pin, LOW);
+            delayMicroseconds(100);
+            digitalWrite(motor_config.step_pin, HIGH);
+            delayMicroseconds(100);
+            motor_state.current_steps--;
+        }
+        else { return; }
+    }
+    else if(!motor_state.enabled)
+    {
+        // Disable Motor
+        digitalWrite(motor_config.ena_pin, LOW);
+    }
 }
 
 extern "C"{
-void loop_comms_state_machine()
+void cycle_comms_state_machine()
 {
     switch (sm.state)
     {
@@ -185,33 +316,13 @@ void loop_comms_state_machine()
             // Get locations of control chars
             for (int i = 0; i <= 16; i++)
             {
-                if (sm.incoming[i] == start_tx)
-                {
-                    mi.start_tx_loc = i;
-                    // Serial.print("FOUND TX LOC\n strlen: ");
-                    // Serial.println(strlen(sm.incoming));
-                }
-                if (sm.incoming[i] == start_data)
-                {
-                    
-                    // Serial.print("FOUND DATA START LOC");
-                    mi.start_data_loc = i;
-                }
-                if (sm.incoming[i] == end_data)
-                {
-                    
-                    // Serial.print("FOUND data end LOC");
-                    mi.end_data_loc = i;
-                }
-                if (sm.incoming[i] == end_tx)
-                {
-
-                    // Serial.print("FOUND end/ LOC");
-                    mi.end_tx_loc = i;
-                }
+                if (sm.incoming[i] == start_tx)     {mi.start_tx_loc    = i;}
+                if (sm.incoming[i] == start_data)   {mi.start_data_loc  = i;}
+                if (sm.incoming[i] == end_data)     {mi.end_data_loc    = i;}
+                if (sm.incoming[i] == end_tx)       {mi.end_tx_loc      = i;}
             }
-            // // Get bytes between start_tx and start_data for msg id
-            
+
+            // Get bytes between start_tx and start_data for msg id
             int id_index=0;
             for(int i = mi.start_tx_loc + 1; i <= mi.start_data_loc; i++)
             {
@@ -227,11 +338,6 @@ void loop_comms_state_machine()
                 data_index++;
             }
 
-            // Serial.print("ID: ");
-            // Serial.write(mi.id, 4);
-            // Serial.print(" | DATA: ");
-            // Serial.write(mi.data, 4);
-            // Serial.println();
             sm.state = RESET_FOR_NEW_MSG;
 
             //Decoding now
@@ -250,8 +356,6 @@ void loop_comms_state_machine()
             {
                 data_union.buffer[i]=mi.data[i];
             }
-            // Serial.print("Union for data as int32: ");
-            // Serial.println(data_union.value);
 
             //get 4 bytes for checksum, push into int32_t
             int8_to_int32 crc_union;
@@ -259,8 +363,6 @@ void loop_comms_state_machine()
             {
                 crc_union.buffer[i]=mi.data[i];
             }
-            // Serial.print("Union for crc as int32: ");
-            // Serial.println(crc_union.value);
 
             // Verify checksum (not implemented yet)
 
@@ -271,30 +373,36 @@ void loop_comms_state_machine()
                     // Check if motor is enabled, if not, ignore command and send error message back
                     if(motor_state.enabled == false)
                     {
-                        Serial.println("MOTOR DISABLED - IGNORING MOVE COMMAND"); //UPdate this to use comms protocol
+                        // Write ACK with fail
+                        send_message(Ack, 0);
                         break;
                     }
                     if(motor_state.enabled == true)
                     {
                         // Update desired position
                         motor_state.desired_deg = motor_state.desired_deg + data_union.value;
-                        Serial.print("Updated desired position to: ");
-                        Serial.println(motor_state.desired_deg);
+                        // Write ACK with success
+                        send_message(Ack, 1);
                     }
-                    Serial.print("MOVE BY ");
-                    Serial.println(data_union.value);
+
+
+
                     break;
                 
                 case Position:
-                    Serial.print("POSITION ");
-                    Serial.println(data_union.value);
+                    // Write ACK with success
+                    send_message(Ack, 1);
+                    // Send motor position (as steps for now) TODO: Change to deg, update deg in motor control cycle
+                    send_message(Position, motor_state.current_steps);
                     break;
+
                 case EStop:
-                    Serial.println("EMERGENCY STOP");
+                    // Write ACK with success
+                    send_message(Ack, 1);
+                    motor_state.estop = true;
                     break;
+
                 case MotorEnable:
-                    Serial.println("MOTOR ENABLE");
-                    Serial.println(data_union.value);
                     if(data_union.value == 1)
                     {
                         motor_state.enabled = true;
@@ -303,9 +411,14 @@ void loop_comms_state_machine()
                     {
                         motor_state.enabled = false;
                     }
+                    
+                    // Write ACK with success
+                    send_message(Ack, 1);
                     break;
+                    
                 case Ack:
-                    Serial.println("ACKNOWLEDGEMENT");
+                    // Write ACK with success
+                    send_message(Ack, 1);
                     break;
 
             }
@@ -317,7 +430,7 @@ void loop_comms_state_machine()
         sm.index = 0;
         sm.bytes_available = 0;
         sm.bytes_read_this_cycle = 0;
-        // sm.incoming[0] = '\0';
+        // Clear incoming message char array to all NULL so when populated makes a valid cstr
         memset(sm.incoming, byte('\0'), sizeof(sm.incoming) * sizeof(sm.incoming[0]));
         sm.state = BYTES_AVAILABLE;
         break;
@@ -325,6 +438,7 @@ void loop_comms_state_machine()
     case RESET_FOR_CONTINUING_MSG:
         // Serial.write("RESET CONTINUE MSG");
         // Serial.flush();
+        // Don't reset index, as we need to continue appending incoming chars to get full msg
         sm.bytes_read_this_cycle = 0;
         sm.state = BYTES_AVAILABLE;
         return;
