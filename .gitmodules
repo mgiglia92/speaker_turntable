@@ -1,6 +1,7 @@
 [submodule "serial-packets"]
 	path = serial-packets
 	url = git@github.com:robotics-crash-course/serial-packets.git
+	branch = turntable_dev
 [submodule "base64.c"]
 	path = base64.c
 	url = git@github.com:mgiglia92/base64.c.git
