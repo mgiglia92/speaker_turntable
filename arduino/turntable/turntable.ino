@@ -1,6 +1,7 @@
+#include <libb64.h>
 // --------------------- Timer Interrupt stuff -------------------- //
 
-/* Set Timer1 use, note, this will only work on Arduino UNO at the moment. 
+/* Set Timer1 use, note, this will only work on Arduino UNO at the moment.
  * And this sketch CANNOT use the Servo Library as that would use Timer1.
  */
 #define USE_TIMER_1 true
@@ -9,6 +10,11 @@
 // --------------------------------------------------------------//
 
 // ------------------ Serial Comms Related -------------//
+// static const char start_tx = '\x01';   // SOH (start of heading)
+// static const char start_data = '\x02'; // STX (start of text)
+// static const char end_data = '\x03';   // ETX (end of text)
+// static const char end_tx = '\x04';     // EOT (end of transmission)
+// ALTERNATE for reading
 static const char start_tx = '#';   // SOH (start of heading)
 static const char start_data = '$'; // STX (start of text)
 static const char end_data = '%';   // ETX (end of text)
@@ -42,6 +48,9 @@ StateMachine sm;
 // --------------------------------------------------------------//
 
 // ------------------ Comms Message Related -------------------//
+#define SERIALIZE_BUF_LEN 17
+#define B64_BUF_LEN 33
+#define PACKET_BUF_LEN B64_BUF_LEN * 5
 struct MessageInfo
 {
 
@@ -49,94 +58,216 @@ struct MessageInfo
     int start_data_loc = 0;
     int end_data_loc = 0;
     int end_tx_loc = 0;
-    char id[4];
-    char data[4];
-    char crc[4];
-
+    // const int id_len = 4;
+    // const int data_len = 4;
+    // const int crc_len = 4;
+    char id_b64[B64_BUF_LEN] = {0};
+    char data_b64[B64_BUF_LEN] = {0};
+    char crc[B64_BUF_LEN] = {0};
 };
 MessageInfo mi;
 
 struct MessagePrototype
 {
-    uint32_t id;
+    int32_t id;
     int32_t data;
 };
 
 enum MessageTypes
 {
-    MoveBy                      = 7,
-    Position                    = 9,
-    IncomingMessageLengthError  = 1,
-    EStop                       = 4,
-    MotorEnable                 = 5,
-    Ack                         = 2,
-    MotionComplete              = 3
+    MoveBy = 7,
+    Position = 9,
+    IncomingMessageLengthError = 1,
+    EStop = 4,
+    MotorEnable = 5,
+    Ack = 2,
+    MotionComplete = 3
 };
 
 const static uint16_t queue_length = 16;
 struct OutBoundMessageQueue
 {
     MessagePrototype queue[queue_length];
-    int16_t index=0;
+    int16_t index = 0;
 };
 
+// union char_to_uint32{
+//     uint32_t value;
+//     char buffer[5];
+// };
 
-union uint8_to_uint32{
-    uint32_t value;
-    char buffer[4];
-};
+// union int8_to_int32{
+//     int32_t value;
+//     int8_t buffer[4];
+// };
 
-union int8_to_int32{
-    int32_t value;
-    int8_t buffer[4];
-};
-
-
-void send_message(uint32_t id, int32_t data)
+union num_to_bytes
 {
-    // Place id into union
-    uint8_to_uint32 id_union;
-    id_union.value = id;
+    int32_t num[2];
+    char bytes[4];
+};
 
-    // Place data into union
-    int8_to_int32 data_union;
-    data_union.value = data;
+void serialize_int32(int32_t input, char *buffer)
+{
+    buffer[0] = (int8_t)(input);
+    buffer[1] = (int8_t)(input >> 8);
+    buffer[2] = (int8_t)(input >> 16);
+    buffer[3] = (int8_t)(input >> 24);
 
-    // buffer byte array
-    const size_t out_buf_size = 16;
-    char out_buf[out_buf_size];
+    return;
+}
 
-    // Set values in buffer
-    out_buf[0] = start_tx;
+int32_t deserialize_int32(char *buffer)
+{
+    int32_t output = 0;
+    output |= (int32_t)(buffer[0] << 24);
+    output |= (int32_t)(buffer[1] << 16);
+    output |= (int32_t)(buffer[2] << 8);
+    output |= (int32_t)(buffer[3]);
+
+    return output;
+}
+
+void send_message(int32_t id, int32_t data)
+{
+    // Serialize id
+    char id_bytes[SERIALIZE_BUF_LEN];
+    serialize_int32(id, id_bytes);
+
+    // Serialize data
+    char data_bytes[SERIALIZE_BUF_LEN];
+    serialize_int32(data, data_bytes);
+
+    // b64 encode id
+    char id_b64[B64_BUF_LEN];
+    encode(id_bytes, id_b64);
+
+    // b64 encode data
+    char data_b64[B64_BUF_LEN];
+    encode(data_bytes, data_b64);
+
+    // Print debug
+    //  Serial.print(" id dec: ");
+    //  Serial.print(id);
+    //  Serial.print(" | id b64: ");
+    //  for(int i=0; i<strlen(id_b64); i++){Serial.print(id_b64[i]);}
+    //  Serial.print(" | data dec: ");
+    //  Serial.print(data);
+    //  Serial.print(" | data b64: ");
+    //  for(int i=0; i<strlen(data_b64); i++){Serial.print(data_b64[i]);}
+    //  Serial.println();
+
+    // Packetize info
+    char packet_out[PACKET_BUF_LEN];
+    char *pack_ptr = packet_out;
+
+    // start tx
+    *pack_ptr = start_tx;
+    pack_ptr++;
     // id
-    out_buf[1] = id_union.buffer[0];
-    out_buf[2] = id_union.buffer[1];
-    out_buf[3] = id_union.buffer[2];
-    out_buf[4] = id_union.buffer[3];
-    
-    out_buf[5] = start_data;
-    // data
-    out_buf[6] = data_union.buffer[0];
-    out_buf[7] = data_union.buffer[1];
-    out_buf[8] = data_union.buffer[2];
-    out_buf[9] = data_union.buffer[3];
-
-    out_buf[10] = end_data;
-    // data again as crc (proper crc not implemented yet)
-    out_buf[11] = data_union.buffer[0];
-    out_buf[12] = data_union.buffer[1];
-    out_buf[13] = data_union.buffer[2];
-    out_buf[14] = data_union.buffer[3];
-    
-    out_buf[15] = end_tx;
-
-    // Print the out buffer to the serial port
-    for(int i=0; i<out_buf_size; i++)
+    for (int i = 0; i < strlen(id_b64); i++)
     {
-        Serial.write(out_buf[i]);
+        *pack_ptr = id_b64[i];
+        pack_ptr++;
+    }
+    // start data
+    *pack_ptr = start_data;
+    pack_ptr++;
+    // data
+    for (int i = 0; i < strlen(data_b64); i++)
+    {
+        *pack_ptr = data_b64[i];
+        pack_ptr++;
+    }
+    // end data
+    *pack_ptr = end_data;
+    pack_ptr++;
+    // data as CRC
+    for (int i = 0; i < strlen(data_b64); i++)
+    {
+        *pack_ptr = data_b64[i];
+        pack_ptr++;
+    }
+    // end tx
+    *pack_ptr = end_tx;
+    pack_ptr++;
+    // null terminate
+    *pack_ptr = '\0';
+    pack_ptr++;
+    size_t num_bytes = pack_ptr - packet_out;
+
+    // Write to serial port
+    for (int i = 0; i < num_bytes; i++)
+    {
+        Serial.write(packet_out[i]);
     }
     Serial.flush();
+}
 
+MessagePrototype recv_message(char *input)
+{
+    MessageInfo mi;
+    // char input[] = "#AAAACQ==$AAAACg==%1bb7&\0";
+    for (int i = 0; i <= strlen(input); i++)
+    {
+        if (input[i] == start_tx)
+        {
+            mi.start_tx_loc = i;
+        }
+        if (input[i] == start_data)
+        {
+            mi.start_data_loc = i;
+        }
+        if (input[i] == end_data)
+        {
+            mi.end_data_loc = i;
+        }
+        if (input[i] == end_tx)
+        {
+            mi.end_tx_loc = i;
+        }
+    }
+
+    // Get bytes between start_tx and start_data for msg id
+    int id_index = 0;
+    for (int i = mi.start_tx_loc + 1; i < mi.start_data_loc; i++)
+    {
+        // Serial.print(input[i]);
+        mi.id_b64[id_index] = input[i];
+        id_index++;
+    }
+
+    // // Get bytes between start_data and end_data for msg data
+    int data_index = 0;
+    for (int i = mi.start_data_loc + 1; i < mi.end_data_loc; i++)
+    {
+        // Serial.print(input[i]);
+        mi.data_b64[data_index] = input[i];
+        data_index++;
+    }
+
+    char id_bytes[SERIALIZE_BUF_LEN] = {0};
+    char data_bytes[SERIALIZE_BUF_LEN] = {0};
+    decode(mi.id_b64, id_bytes);
+    decode(mi.data_b64, data_bytes);
+    // for(int i=0; i<SERIALIZE_BUF_LEN; i++)
+    // {
+    //     Serial.print(id_bytes[i], BIN);
+    // }
+    int32_t id = deserialize_int32(id_bytes);
+    int32_t data = deserialize_int32(data_bytes);
+
+    // Serial.print(" id: ");
+    // Serial.print(id);
+    // Serial.print(" | data: ");
+    // Serial.print(data);
+    // Serial.println();
+
+    MessagePrototype mp;
+    mp.id = id;
+    mp.data = data;
+
+    return mp;
 }
 // --------------------------------------------------------------//
 
@@ -146,7 +277,7 @@ struct MotorConfig
     uint8_t step_pin = 5;
     uint8_t dir_pin = 6;
     uint8_t ena_pin = 7;
-    uint32_t steps_per_degree = 10; // 10 steps per degree of rotation of the turntable
+    uint32_t steps_per_degree = 10;   // 10 steps per degree of rotation of the turntable
     unsigned long step_interval = 20; // ms
 };
 
@@ -156,8 +287,8 @@ struct MotorControlState
 {
     volatile bool enabled = false;
     volatile int32_t current_steps = 0; // in steps
-    volatile int32_t current_deg = 0; // in degrees
-    volatile int32_t desired_deg = 0; // in degrees
+    volatile int32_t current_deg = 0;   // in degrees
+    volatile int32_t desired_deg = 0;   // in degrees
     volatile bool estop = false;
 };
 
@@ -169,32 +300,36 @@ void motor_setup()
     pinMode(motor_config.dir_pin, OUTPUT);
 }
 
-void cycle_motor_control(); //Forward declaration
+void cycle_motor_control(); // Forward declaration
 // ---------------------------------------------------------- //
-
 
 // ----------------------- Standard Arduino Stuff ----------------//
 void setup()
 {
     Serial.begin(115200, SERIAL_8N1);
     motor_setup();
-    
+
     sm.state = BYTES_AVAILABLE;
     sm.index = 0;
 
     ITimer1.init();
     if (ITimer1.attachInterruptInterval(motor_config.step_interval, cycle_motor_control))
     {
-        Serial.print(F("Starting  ITimer1 OK, millis() = ")); Serial.println(millis());
+        Serial.print(F("Starting  ITimer1 OK, millis() = "));
+        Serial.println(millis());
     }
     else
         Serial.println(F("Can't set ITimer1. Select another freq. or timer"));
 }
 
-
 void loop()
 {
     cycle_comms_state_machine();
+    // Serial.println("LOOP")
+    // send_message(Ack, (int32_t)(50));
+    // char in[B64_BUF_LEN];
+    // recv_message(in);
+    // delay(100);
 }
 
 // ---------------------------------------------------------- //
@@ -206,16 +341,16 @@ void cycle_motor_control()
      * into steps using the steps_per_degree config parameter.
      * Then an error_steps is calculated and used to determine which way to step the motor
      * The enable pin is set before any control, and control only happens if motor is enabled
-    */
+     */
     int32_t desired_steps = motor_state.desired_deg * motor_config.steps_per_degree;
-    int32_t error_steps = desired_steps - motor_state.current_steps ;
-    
-    if(motor_state.enabled)
+    int32_t error_steps = desired_steps - motor_state.current_steps;
+
+    if (motor_state.enabled)
     {
         // Enable Motor
         digitalWrite(motor_config.ena_pin, HIGH);
 
-        if(error_steps > 0)
+        if (error_steps > 0)
         {
             // Set dir pin
             digitalWrite(motor_config.dir_pin, LOW);
@@ -227,7 +362,7 @@ void cycle_motor_control()
             delayMicroseconds(100);
             motor_state.current_steps++;
         }
-        else if(error_steps < 0)
+        else if (error_steps < 0)
         {
             digitalWrite(motor_config.dir_pin, HIGH);
             delayMicroseconds(100);
@@ -238,16 +373,18 @@ void cycle_motor_control()
             delayMicroseconds(100);
             motor_state.current_steps--;
         }
-        else { return; }
+        else
+        {
+            return;
+        }
     }
-    else if(!motor_state.enabled)
+    else if (!motor_state.enabled)
     {
         // Disable Motor
         digitalWrite(motor_config.ena_pin, LOW);
     }
 }
 
-extern "C"{
 void cycle_comms_state_machine()
 {
     switch (sm.state)
@@ -285,7 +422,7 @@ void cycle_comms_state_machine()
                 // Serial.write("FOUND END TX");
                 // Serial.flush();
                 return;
-            }            
+            }
 
             sm.index++;
             sm.bytes_read_this_cycle++;
@@ -301,129 +438,74 @@ void cycle_comms_state_machine()
         return;
 
     case SEND_TO_DECODE:
+    {
+        MessagePrototype mp;
+        mp = recv_message(sm.incoming);
+
+        // Check message type and act accordingly
+        switch (mp.id)
         {
-            // Serial.write("SEND TO DECODE");
-            // Serial.flush();
-            // // // Do decoding
-            // // Serial.write(sm.incoming, strlen(sm.incoming));
-            // // Serial.flush();
-            // // // Serial.write("IN DECODING");
-            // for (int i = 0; i <= 16; i++)
-            // {
-            //     Serial.write(sm.incoming[i]);
-            // }
-
-            // Get locations of control chars
-            for (int i = 0; i <= 16; i++)
+        case MoveBy:
+            // Check if motor is enabled, if not, ignore command and send error message back
+            if (motor_state.enabled == false)
             {
-                if (sm.incoming[i] == start_tx)     {mi.start_tx_loc    = i;}
-                if (sm.incoming[i] == start_data)   {mi.start_data_loc  = i;}
-                if (sm.incoming[i] == end_data)     {mi.end_data_loc    = i;}
-                if (sm.incoming[i] == end_tx)       {mi.end_tx_loc      = i;}
+                // Write ACK with fail
+                send_message(Ack, 0);
+                break;
+            }
+            if (motor_state.enabled == true)
+            {
+                // Update desired position
+                motor_state.desired_deg = motor_state.desired_deg + mp.data;
+                // Write ACK with success
+                send_message(Ack, 1);
             }
 
-            // Get bytes between start_tx and start_data for msg id
-            int id_index=0;
-            for(int i = mi.start_tx_loc + 1; i <= mi.start_data_loc; i++)
-            {
-                mi.id[id_index] = sm.incoming[i];
-                id_index++;
-            }
+            break;
 
-            // // Get bytes between start_data and end_data for msg data
-            int data_index=0;
-            for(int i=mi.start_data_loc + 1; i <= mi.end_data_loc; i++)
-            {
-                mi.data[data_index] = sm.incoming[i];
-                data_index++;
-            }
-
-            sm.state = RESET_FOR_NEW_MSG;
-
-            //Decoding now
-            //Get 4 bytes for id, push into uint32_t
-            uint8_to_uint32 id_union;
-            for(int i =0; i <4; i++)
-            {
-                id_union.buffer[i]=mi.id[i];
-            }
-            // Serial.print("Union for id as int32: ");
-            // Serial.println(id_union.value);
-
-            //get 4 bytes for data, push into int32_t (notice signed not unsigned)
-            int8_to_int32 data_union;
-            for(int i =0; i <4; i++)
-            {
-                data_union.buffer[i]=mi.data[i];
-            }
-
-            //get 4 bytes for checksum, push into int32_t
-            int8_to_int32 crc_union;
-            for(int i =0; i <4; i++)
-            {
-                crc_union.buffer[i]=mi.data[i];
-            }
-
-            // Verify checksum (not implemented yet)
-
-            // Check message type and act accordingly
-            switch (id_union.value)
-            {
-                case MoveBy:
-                    // Check if motor is enabled, if not, ignore command and send error message back
-                    if(motor_state.enabled == false)
-                    {
-                        // Write ACK with fail
-                        send_message(Ack, 0);
-                        break;
-                    }
-                    if(motor_state.enabled == true)
-                    {
-                        // Update desired position
-                        motor_state.desired_deg = motor_state.desired_deg + data_union.value;
-                        // Write ACK with success
-                        send_message(Ack, 1);
-                    }
-
-
-
-                    break;
-                
-                case Position:
-                    // Write ACK with success
-                    send_message(Ack, 1);
-                    // Send motor position (as steps for now) TODO: Change to deg, update deg in motor control cycle
-                    send_message(Position, motor_state.current_steps);
-                    break;
-
-                case EStop:
-                    // Write ACK with success
-                    send_message(Ack, 1);
-                    motor_state.estop = true;
-                    break;
-
-                case MotorEnable:
-                    if(data_union.value == 1)
-                    {
-                        motor_state.enabled = true;
-                    }
-                    else
-                    {
-                        motor_state.enabled = false;
-                    }
-                    
-                    // Write ACK with success
-                    send_message(Ack, 1);
-                    break;
-                    
-                case Ack:
-                    // Write ACK with success
-                    send_message(Ack, 1);
-                    break;
-
-            }
+        case Position:
+        {
+            // Write ACK with success
+            send_message(Ack, 1);
+            // Send motor position (as steps for now) TODO: Change to deg, update deg in motor control cycle
+            // TODO: Fix negative values for base64 encoding issue
+            ITimer1.disableTimer();
+            int32_t* pos = malloc(sizeof(int32_t));
+            *pos = abs(motor_state.current_steps);
+            send_message(Position, *pos);
+            free(pos);
+            ITimer1.enableTimer();
+            break;
         }
-        break;
+        case EStop:
+            // Write ACK with success
+            send_message(Ack, 1);
+            motor_state.estop = true;
+            break;
+
+        case MotorEnable:
+            if (mp.data == 1)
+            {
+                motor_state.enabled = true;
+            }
+            else
+            {
+                motor_state.enabled = false;
+            }
+
+            // Write ACK with success
+            send_message(Ack, 1);
+            break;
+
+        case Ack:
+            // Write ACK with success
+            send_message(Ack, 1);
+            break;
+        }
+
+        sm.state = RESET_FOR_NEW_MSG;
+    }
+    break;
 
     case RESET_FOR_NEW_MSG:
         // Serial.write("RESET FOR NEW MSG");
@@ -432,6 +514,11 @@ void cycle_comms_state_machine()
         sm.bytes_read_this_cycle = 0;
         // Clear incoming message char array to all NULL so when populated makes a valid cstr
         memset(sm.incoming, byte('\0'), sizeof(sm.incoming) * sizeof(sm.incoming[0]));
+        // Reset packet control characters
+        mi.start_tx_loc = 0;
+        mi.start_data_loc = 0;
+        mi.end_data_loc = 0;
+        mi.end_tx_loc = 0;
         sm.state = BYTES_AVAILABLE;
         break;
 
@@ -446,5 +533,4 @@ void cycle_comms_state_machine()
     default:
         break;
     }
-}
 }
