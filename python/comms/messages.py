@@ -4,6 +4,7 @@
 #  */
 
 from comms.packet import Packet
+from serialize import *
 
 class Message:
     def __init__(self, data):
@@ -14,7 +15,7 @@ class Message:
         return 0
     
     def pack(self):
-        return Packet(0, self.data_)
+        return Packet(0, serialize((Int32,), [self.data_]))
     
 
 class MoveBy(Message):
@@ -26,7 +27,7 @@ class MoveBy(Message):
         return 7
 
     def pack(self):
-        return Packet(7, self.data_)
+        return Packet(7, serialize((Int32,), [self.data_]))
     
 class Position(Message):
     def __init__(self, data):
@@ -37,7 +38,7 @@ class Position(Message):
         return 9
 
     def pack(self):
-        return Packet(9, self.data_)
+        return Packet(9, serialize((Int32,), [self.data_]))
 
 class IncomingMessageLengthError(Message):
     def __init__(self, data):
@@ -48,7 +49,7 @@ class IncomingMessageLengthError(Message):
         return 1
     
     def pack(self):
-        return Packet(1, self.data_)
+        return Packet(1, serialize((Int32,), [self.data_]))
 
 class EStop(Message):
     def __init__(self, data):
@@ -59,7 +60,7 @@ class EStop(Message):
         return 4
     
     def pack(self):
-        return Packet(4, self.data_)
+        return Packet(4, serialize((Int32,), [self.data_]))
 
 class MotorEnable(Message):
     def __init__(self, data):
@@ -70,7 +71,7 @@ class MotorEnable(Message):
         return 5
     
     def pack(self):
-        return Packet(5, self.data_)
+        return Packet(5, serialize((Int32,), [self.data_]))
     
 class Ack(Message):
     def __init__(self, data):
@@ -81,7 +82,7 @@ class Ack(Message):
         return 2
     
     def pack(self):
-        return Packet(2, self.data_)
+        return Packet(2, serialize((Int32,), [self.data_]))
 
 class MotionComplete(Message):
     def __init__(self, data):
@@ -92,4 +93,4 @@ class MotionComplete(Message):
         return 3
     
     def pack(self):
-        return Packet(3, self.data_)
+        return Packet(3, serialize((Int32,), [self.data_]))
