@@ -1,6 +1,6 @@
 from motor_interface import MotorInterface
 import traceback
-from comms.messages import *
+from messages import *
 from time import sleep
 
 def print_msg(p: Packet, motor_interface: MotorInterface):
