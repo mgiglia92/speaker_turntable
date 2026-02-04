@@ -10,6 +10,6 @@ the absoulte directory location of:
 so that vscode intellisense with auto complete, and python will find
 our modules
 
-TODO: Make libb64 submodule of this project, update local symlink to libb64 in arduino/libraries
+Make sure to symbolic link libb64 to Arduino/libraries so arduino complier can find it
 
 Make sure you submodule init and submodule update
