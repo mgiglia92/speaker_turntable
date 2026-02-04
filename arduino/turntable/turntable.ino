@@ -107,28 +107,25 @@ union num_to_bytes
     char bytes[4];
 };
 
-void serialize_int32(int32_t input, char *buffer)
+void serialize_int32(uint32_t value, char* out)
 {
-    buffer[0] = (int8_t)(input);
-    buffer[1] = (int8_t)(input >> 8);
-    buffer[2] = (int8_t)(input >> 16);
-    buffer[3] = (int8_t)(input >> 24);
 
+    out[0] = (char)( value        & 0xFF);
+    out[1] = (char)((value >> 8)  & 0xFF);
+    out[2] = (char)((value >> 16) & 0xFF);
+    out[3] = (char)((value >> 24) & 0xFF);
     return;
 }
 
-int32_t deserialize_int32(char *buffer)
+uint32_t deserialize_int32(const char in[4])
 {
-    int32_t output = 0;
-    output |= (int32_t)(buffer[0] << 24);
-    output |= (int32_t)(buffer[1] << 16);
-    output |= (int32_t)(buffer[2] << 8);
-    output |= (int32_t)(buffer[3]);
-
-    return output;
+    return ((uint32_t)(char)in[0])        |
+           ((uint32_t)(char)in[1] << 8)   |
+           ((uint32_t)(char)in[2] << 16)  |
+           ((uint32_t)(char)in[3] << 24);
 }
 
-void send_message(int32_t id, int32_t data)
+void send_message(uint32_t id, uint32_t data)
 {
     // Serialize id
     char id_bytes[SERIALIZE_BUF_LEN];
@@ -138,13 +135,24 @@ void send_message(int32_t id, int32_t data)
     char data_bytes[SERIALIZE_BUF_LEN];
     serialize_int32(data, data_bytes);
 
+    // uint32_t deserial_data = deserialize_int32(data_bytes);
+    //  Serial.print(" id dec: ");
+    //  Serial.print(id);
+    //  Serial.print(" | id bytes: ");
+    //  for(int i=0; i<4; i++){Serial.print(id_bytes[i], DEC); Serial.print(" ");}
+    //  Serial.print(" | data dec: ");
+    //  Serial.print((int32_t)data);
+    //  Serial.print(" | data bytes: ");
+    //  for(int i=0; i<4; i++){Serial.print(data_bytes[i], DEC); Serial.print(" ");}
+    //  Serial.println();
+
     // b64 encode id
-    char id_b64[B64_BUF_LEN];
-    encode(id_bytes, id_b64);
+    char id_b64[B64_BUF_LEN] = {0};
+    encode(id_bytes, id_b64, 4);
 
     // b64 encode data
-    char data_b64[B64_BUF_LEN];
-    encode(data_bytes, data_b64);
+    char data_b64[B64_BUF_LEN] = {0};
+    encode(data_bytes, data_b64, 4);
 
     // Print debug
     //  Serial.print(" id dec: ");
@@ -152,7 +160,7 @@ void send_message(int32_t id, int32_t data)
     //  Serial.print(" | id b64: ");
     //  for(int i=0; i<strlen(id_b64); i++){Serial.print(id_b64[i]);}
     //  Serial.print(" | data dec: ");
-    //  Serial.print(data);
+    //  Serial.print((int32_t)data);
     //  Serial.print(" | data b64: ");
     //  for(int i=0; i<strlen(data_b64); i++){Serial.print(data_b64[i]);}
     //  Serial.println();
@@ -325,8 +333,9 @@ void setup()
 void loop()
 {
     cycle_comms_state_machine();
+    // delay(10);
     // Serial.println("LOOP")
-    // send_message(Ack, (int32_t)(50));
+    // send_message(Ack, 256);
     // char in[B64_BUF_LEN];
     // recv_message(in);
     // delay(100);
@@ -471,7 +480,7 @@ void cycle_comms_state_machine()
             // TODO: Fix negative values for base64 encoding issue
             ITimer1.disableTimer();
             int32_t* pos = malloc(sizeof(int32_t));
-            *pos = abs(motor_state.current_steps);
+            *pos = motor_state.current_steps;
             send_message(Position, *pos);
             free(pos);
             ITimer1.enableTimer();
