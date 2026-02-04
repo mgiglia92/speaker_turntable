@@ -387,6 +387,7 @@ void cycle_motor_control()
             return;
         }
     }
+
     else if (!motor_state.enabled)
     {
         // Disable Motor
@@ -478,12 +479,12 @@ void cycle_comms_state_machine()
             send_message(Ack, 1);
             // Send motor position (as steps for now) TODO: Change to deg, update deg in motor control cycle
             // TODO: Fix negative values for base64 encoding issue
-            ITimer1.disableTimer();
-            int32_t* pos = malloc(sizeof(int32_t));
-            *pos = motor_state.current_steps;
-            send_message(Position, *pos);
-            free(pos);
-            ITimer1.enableTimer();
+            // ITimer1.disableTimer();
+            // int32_t* pos = malloc(sizeof(int32_t));
+            // *pos = motor_state.current_steps;
+            send_message(Position, (uint32_t)motor_state.current_steps);
+            // free(pos);
+            // ITimer1.enableTimer();
             break;
         }
         case EStop:
