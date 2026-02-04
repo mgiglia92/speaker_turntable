@@ -81,7 +81,8 @@ enum MessageTypes
     EStop = 4,
     MotorEnable = 5,
     Ack = 2,
-    MotionComplete = 3
+    MotionComplete = 3,
+    Initialized = 10
 };
 
 const static uint16_t queue_length = 16;
@@ -295,7 +296,7 @@ struct MotorControlState
 {
     volatile bool enabled = false;
     volatile int32_t current_steps = 0; // in steps
-    volatile int32_t current_deg = 0;   // in degrees
+    volatile int32_t current_deg_hundreths = 0;   // in degrees
     volatile int32_t desired_deg = 0;   // in degrees
     volatile bool estop = false;
 };
@@ -315,6 +316,7 @@ void cycle_motor_control(); // Forward declaration
 void setup()
 {
     Serial.begin(115200, SERIAL_8N1);
+    pinMode(13, OUTPUT);
     motor_setup();
 
     sm.state = BYTES_AVAILABLE;
@@ -328,7 +330,13 @@ void setup()
     }
     else
         Serial.println(F("Can't set ITimer1. Select another freq. or timer"));
-}
+
+    delay(1000);
+    send_message(Initialized, 1);
+    send_message(Initialized, 1);
+    send_message(Initialized, 1);
+}   
+
 
 void loop()
 {
@@ -343,6 +351,7 @@ void loop()
 
 // ---------------------------------------------------------- //
 
+volatile static int led_toggle_cnt;
 void cycle_motor_control()
 {
     // Get motor error, (desired - current)
@@ -351,10 +360,18 @@ void cycle_motor_control()
      * Then an error_steps is calculated and used to determine which way to step the motor
      * The enable pin is set before any control, and control only happens if motor is enabled
      */
+
+    // Toggle pin 13 LED for debug
+    led_toggle_cnt++;
+    if(!(led_toggle_cnt % 10))
+    {
+        digitalWrite(13, !digitalRead(13));
+    }
+
     int32_t desired_steps = motor_state.desired_deg * motor_config.steps_per_degree;
     int32_t error_steps = desired_steps - motor_state.current_steps;
 
-    if (motor_state.enabled)
+    if (motor_state.enabled && !motor_state.estop)
     {
         // Enable Motor
         digitalWrite(motor_config.ena_pin, HIGH);
@@ -382,13 +399,12 @@ void cycle_motor_control()
             delayMicroseconds(100);
             motor_state.current_steps--;
         }
-        else
-        {
-            return;
-        }
+        // Convert steps to hundreths of a degree (so I dont need to send floats over comms protocol)
+        motor_state.current_deg_hundreths = (int32_t)((100.0 * motor_state.current_steps)/ (float)motor_config.steps_per_degree);
+        return;
     }
 
-    else if (!motor_state.enabled)
+    else if (!motor_state.enabled || motor_state.estop)
     {
         // Disable Motor
         digitalWrite(motor_config.ena_pin, LOW);
@@ -466,7 +482,7 @@ void cycle_comms_state_machine()
             if (motor_state.enabled == true)
             {
                 // Update desired position
-                motor_state.desired_deg = motor_state.desired_deg + mp.data;
+                motor_state.desired_deg = motor_state.desired_deg + (int32_t)mp.data;
                 // Write ACK with success
                 send_message(Ack, 1);
             }
@@ -482,7 +498,7 @@ void cycle_comms_state_machine()
             // ITimer1.disableTimer();
             // int32_t* pos = malloc(sizeof(int32_t));
             // *pos = motor_state.current_steps;
-            send_message(Position, (uint32_t)motor_state.current_steps);
+            send_message(Position, (uint32_t)motor_state.current_deg_hundreths);
             // free(pos);
             // ITimer1.enableTimer();
             break;
