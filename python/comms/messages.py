@@ -11,11 +11,15 @@ class Message:
         self.data_ = data
 
     @staticmethod
-    def id(self):
+    def id():
         return 0
     
     def pack(self):
         return Packet(0, serialize((Int32,), [self.data_]))
+
+    def __repr__(self):
+        return f'Message(id={self.id()}, data={deserialize((Int32,), self.data_)[0]})'
+
     
 
 class MoveBy(Message):
@@ -23,7 +27,7 @@ class MoveBy(Message):
         self.data_ = data
     
     @staticmethod
-    def id(self):
+    def id():
         return 7
 
     def pack(self):
@@ -34,7 +38,7 @@ class Position(Message):
         self.data_ = data
     
     @staticmethod
-    def id(self):
+    def id():
         return 9
 
     def pack(self):
@@ -45,7 +49,7 @@ class IncomingMessageLengthError(Message):
         self.data_ = data
     
     @staticmethod
-    def id(self):
+    def id():
         return 1
     
     def pack(self):
@@ -56,7 +60,7 @@ class EStop(Message):
         self.data_ = data
     
     @staticmethod
-    def id(self):
+    def id():
         return 4
     
     def pack(self):
@@ -67,7 +71,7 @@ class MotorEnable(Message):
         self.data_ = data
     
     @staticmethod
-    def id(self):
+    def id():
         return 5
     
     def pack(self):
@@ -78,7 +82,7 @@ class Ack(Message):
         self.data_ = data
     
     @staticmethod
-    def id(self):
+    def id():
         return 2
     
     def pack(self):
@@ -89,7 +93,7 @@ class MotionComplete(Message):
         self.data_ = data
     
     @staticmethod
-    def id(self):
+    def id():
         return 3
     
     def pack(self):
