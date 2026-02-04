@@ -112,4 +112,4 @@ class Packet:
 				pass
 
 	def __repr__(self):
-		return f'Packet<id_={self.id_}, data_={self.data_.int} ; {self.checksum()}>'
+		return f'Packet<id_={self.id_}, data_={self.data_} ; Checksum Not Implemented!>'
