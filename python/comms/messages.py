@@ -20,7 +20,16 @@ class Message:
     def __repr__(self):
         return f'Message(id={self.id()}, data={deserialize((Int32,), self.data_)[0]})'
 
+class Initialized(Message):
+    def __init__(self, data):
+        self.data_ = data
     
+    @staticmethod
+    def id():
+        return 10
+    
+    def pack(self):
+             return Packet(10, serialize((Int32, ), [self.data_]))
 
 class MoveBy(Message):
     def __init__(self, data):
@@ -34,7 +43,7 @@ class MoveBy(Message):
         return Packet(7, serialize((Int32,), [self.data_]))
     
 class Position(Message):
-    def __init__(self, data):
+    def __init__(self, data: int=0):
         self.data_ = data
     
     @staticmethod

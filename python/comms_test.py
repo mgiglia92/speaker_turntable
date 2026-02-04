@@ -38,11 +38,11 @@ def main():
         # packet = Packet(100, serialize(spec, [89, 9.909]))
         # packet = Test_Outbound(float(89), float(9.09)).pack()
         
-        packet = MotorEnable(1).pack()
+        packet = MotorEnable(0).pack()
         comms.outbound.put(packet)
         # packet.write_to(comms)
         # # print(f'I printed: {packet.to_bytes()}')
-        packet = MoveBy(-151).pack()
+        packet = MoveBy(-1).pack()
 
         comms.outbound.put(packet)
         # packet.write_to(comms)
