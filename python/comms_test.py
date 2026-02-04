@@ -11,13 +11,11 @@ from comms.messages import *
 from comms.packet import *
 # from packet import *
 from threading import Thread
+from controller import CommsController
 # from messages import Test_Outbound
+import traceback
 
-ard = Serial('COM4', baudrate=115200)
-ard.bytesize=EIGHTBITS
-ard.parity=PARITY_NONE
-ard.stopbits=STOPBITS_ONE
-# ard.set_buffer_size(256, 256)
+
 
 def read_loop(cls: Packet, ser: Serial):
     while True:
@@ -30,25 +28,48 @@ def read_loop(cls: Packet, ser: Serial):
         except:
             pass
 
-read_thread = Thread(target = read_loop, args=[Packet, ard], daemon=True)
 
 def main():
-    spec = (Int32, Float)
-    # packet = Packet(100, serialize(spec, [89, 9.909]))
-    # packet = Test_Outbound(float(89), float(9.09)).pack()
-    
-    packet = MotorEnable(1).pack()
-    packet.write_to(ard)
-    # print(f'I printed: {packet.to_bytes()}')
-    packet = MoveBy(int(151)).pack()
-    packet.write_to(ard)
-    # print(f'I printed: {packet.to_bytes()}')
-    packet = Position(10).pack()
-    packet.write_to(ard)
-    # print(f'I printed: {packet.to_bytes()}')
-    sleep(1)
+    comms = CommsController('COM4', baudrate=115200)
+    # read_thread = Thread(target = read_loop, args=[Packet, comms], daemon=True)
+    # read_thread.start()
+    while(True):
+        spec = (Int32, Float)
+        # packet = Packet(100, serialize(spec, [89, 9.909]))
+        # packet = Test_Outbound(float(89), float(9.09)).pack()
+        
+        packet = MotorEnable(1).pack()
+        comms.outbound.put(packet)
+        # packet.write_to(comms)
+        # # print(f'I printed: {packet.to_bytes()}')
+        packet = MoveBy(-151).pack()
+
+        comms.outbound.put(packet)
+        # packet.write_to(comms)
+        # # print(f'I printed: {packet.to_bytes()}')
+        packet = Position(10).pack()
+        comms.outbound.put(packet)
+        # packet.write_to(comms)
+        # # print(f'I printed: {packet.to_bytes()}')
+        try:
+            while(comms.inbound.empty() == False):
+                p = comms.inbound.get_nowait()
+                print_msg(p)
+        except Exception as e:
+            traceback.print_exc()
+        sleep(1)
+
+def print_msg(p: Packet):
+    if p.id() == Position.id():
+        print(Position(p.data()))
+    if p.id() == Ack.id():
+        print(Ack(p.data()))
+    if p.id() == IncomingMessageLengthError.id():
+        print(IncomingMessageLengthError(p.data()))
+    if p.id() == EStop.id():
+        print(EStop(p.data()))
+    if p.id() == MotorEnable.id():
+        print(MotorEnable(p.data()))
 
 if __name__ == "__main__":
-    read_thread.start()
-    while True:
         main()
