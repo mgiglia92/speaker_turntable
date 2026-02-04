@@ -11,3 +11,5 @@ so that vscode intellisense with auto complete, and python will find
 our modules
 
 TODO: Make libb64 submodule of this project, update local symlink to libb64 in arduino/libraries
+
+Make sure you submodule init and submodule update

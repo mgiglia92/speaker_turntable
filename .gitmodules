@@ -5,3 +5,6 @@
 [submodule "base64.c"]
 	path = base64.c
 	url = git@github.com:mgiglia92/base64.c.git
+[submodule "libb64"]
+	path = libb64
+	url = git@github.com:mgiglia92/libb64.git
