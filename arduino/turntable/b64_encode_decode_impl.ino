@@ -11,7 +11,7 @@
 
 /* arbitrary buffer size */
 
-char* encode(const char* input, char* output)
+char* encode(const char* input, char* output, uint8_t len)
 {
   /* set up a destination buffer large enough to hold the encoded data */
   // static char* output = (char*)malloc(B64_BUF_LEN);
@@ -26,7 +26,7 @@ char* encode(const char* input, char* output)
   /* initialise the encoder state */
   base64_init_encodestate(&s);
   /* gather data from the input and send it to the output */
-  cnt = base64_encode_block(input, strlen(input), c, &s);
+  cnt = base64_encode_block(input, len, c, &s);
   c += cnt;
   /* since we have encoded the entire input string, we know that 
      there is no more input data; finalise the encoding */
