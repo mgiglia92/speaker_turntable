@@ -31,7 +31,9 @@ def main():
             traceback.print_exc()
 
     m.motor_enable(1)
-    m.move_by(-1011)
+    m.move_by(-10)
+
+    # This should be in a separate thread
     while(True):
         m.get_position()
         try:
