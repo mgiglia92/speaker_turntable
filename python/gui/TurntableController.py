@@ -21,7 +21,7 @@ class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
         except:
             traceback.print_exc()
         self.incoming_message_timer = QTimer(self)
-        self.incoming_message_timer.setInterval(10)
+        self.incoming_message_timer.setInterval(100)
         self.incoming_message_timer.timeout.connect(self.incoming_message_handle)
 
         self.request_position_timer = QTimer(self)
@@ -36,24 +36,27 @@ class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
         self.movePlusOne_button.clicked.connect(self.movePlusOne)
         self.degIndicator.setNumDigits(5)
         self.sendCommand_button.clicked.connect(self.sendCommand)
+        self.closeConnection_button.clicked.connect(self.closeConnection)
 
         self.incoming_message_timer.start()
-        self.request_position_timer.start()
+        # self.request_position_timer.start()
     
+    def closeConnection(self):
+        self.motor_interface.ser.close()
+
     def request_position(self):
-        self.motor_interface.outbound.put(Position(0).pack())
+        self.motor_interface.get_position()
 
     def sendCommand(self):
         # Get the spinbox number
         val = self.moveAmount_spinBox.value()
-        msg = MoveBy(val)
-        self.motor_interface.outbound.put(msg.pack())
+        self.motor_interface.move_by(val)
 
     def movePlusOne(self):
-        self.motor_interface.outbound.put(MoveBy(int(1)).pack())
+        self.motor_interface.move_by(1)
 
     def moveMinusOne(self):
-        self.motor_interface.outbound.put(MoveBy(int(-1)).pack())
+        self.motor_interface.move_by(-1)
         
     def enableMotor(self):
         self.motor_interface.outbound.put(MotorEnable(1).pack())
@@ -66,11 +69,11 @@ class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
 
     def incoming_message_handle(self):
         try:
-            if(self.motor_interface is not None):
+            if(self.motor_interface != None):
                 if(not self.motor_interface.inbound.empty()):
                     p = self.motor_interface.inbound.get_nowait()
                     self.handle_message(p)
-                    self.incomingMessages_plainTxtEdit.appendPlainText(p.__repr__())
+                    self.incomingMessages_plainTxtEdit.setPlainText(p.__repr__())
         except:
             traceback.print_exc()
     

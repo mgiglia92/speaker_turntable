@@ -238,7 +238,7 @@
       <x>120</x>
       <y>70</y>
       <width>75</width>
-      <height>24</height>
+      <height>51</height>
      </rect>
     </property>
     <property name="text">
@@ -253,6 +253,20 @@
       <width>351</width>
       <height>281</height>
      </rect>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="closeConnection_button">
+    <property name="geometry">
+     <rect>
+      <x>210</x>
+      <y>70</y>
+      <width>75</width>
+      <height>51</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Close 
+Connection</string>
     </property>
    </widget>
   </widget>
