@@ -15,7 +15,7 @@ from packet import Packet
 class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
     def setup(self):
         # Initialize Motor interface
-
+        self.motor_interface = None
         try:
             self.tryConnect()    
         except:
