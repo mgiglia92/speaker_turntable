@@ -286,7 +286,7 @@ struct MotorConfig
     uint8_t step_pin = 5;
     uint8_t dir_pin = 6;
     uint8_t ena_pin = 7;
-    uint32_t steps_per_degree = 10;   // 10 steps per degree of rotation of the turntable
+    double steps_per_degree = 24.444444444;   // 24 steps per degree of rotation of the turntable
     unsigned long step_interval = 20; // ms
 };
 
@@ -368,7 +368,7 @@ void cycle_motor_control()
         digitalWrite(13, !digitalRead(13));
     }
 
-    int32_t desired_steps = motor_state.desired_deg * motor_config.steps_per_degree;
+    int32_t desired_steps = (int32_t)(motor_state.desired_deg * motor_config.steps_per_degree);
     int32_t error_steps = desired_steps - motor_state.current_steps;
 
     if (motor_state.enabled && !motor_state.estop)
