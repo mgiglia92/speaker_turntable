@@ -42,6 +42,7 @@ class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
         self.degIndicator.setNumDigits(5)
         self.sendCommand_button.clicked.connect(self.sendCommand)
         self.closeConnection_button.clicked.connect(self.closeConnection)
+        self.setZero_button.clicked.connect(self.setZero)
         
         # Initialize Motor interface
         self.motor_interface = None
@@ -58,6 +59,9 @@ class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
     @pyqtSlot(str)
     def setPlainText(self, val: str):
         self.incomingMessages_plainTxtEdit.setPlainText(val)
+
+    def setZero(self):
+        self.motor_interface.set_zero()
 
     def closeConnection(self):
         self.motor_interface.ser.close()

@@ -44,3 +44,12 @@ class MotorInterface(CommsController):
             traceback.print_exc()
             return 1 # Error
         return 0 # No error
+
+    def set_zero(self):
+        try:
+            p = SetZero(int(0)).pack()
+            self.outbound.put(p)
+        except Exception as e:
+            traceback.print_exc()
+            return 1
+        return 0
