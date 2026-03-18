@@ -82,7 +82,8 @@ enum MessageTypes
     MotorEnable = 5,
     Ack = 2,
     MotionComplete = 3,
-    Initialized = 10
+    Initialized = 10,
+    SetZero = 11
 };
 
 const static uint16_t queue_length = 16;
@@ -286,8 +287,8 @@ struct MotorConfig
     uint8_t step_pin = 5;
     uint8_t dir_pin = 6;
     uint8_t ena_pin = 7;
-    double steps_per_degree = 24.444444444;   // 24 steps per degree of rotation of the turntable
-    unsigned long step_interval = 20; // ms
+    double steps_per_degree = 195.5555555555;   // 24 steps per degree of rotation of the turntable
+    unsigned long step_interval = 5; // ms
 };
 
 MotorConfig motor_config;
@@ -307,6 +308,7 @@ void motor_setup()
 {
     pinMode(motor_config.step_pin, OUTPUT);
     pinMode(motor_config.dir_pin, OUTPUT);
+    pinMode(motor_config.ena_pin, OUTPUT);
 }
 
 void cycle_motor_control(); // Forward declaration
@@ -488,6 +490,16 @@ void cycle_comms_state_machine()
             }
 
             break;
+
+        case SetZero:
+        {
+            ITimer1.disableTimer();
+            motor_state.desired_deg = 0;
+            motor_state.current_steps = 0;
+            ITimer1.enableTimer();
+            send_message(Ack, 1);
+            break;
+        }
 
         case Position:
         {
