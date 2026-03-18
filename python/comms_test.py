@@ -6,15 +6,15 @@ import numpy as np
 from numpy import int32
 from ctypes import c_int32, c_uint32
 from serialize import *
-# from packet import Packet, start_tx, start_data, end_data, end_tx
-from comms.messages import *
-from comms.packet import *
+from packet import Packet, start_tx, start_data, end_data, end_tx
+from messages import *
+from packet import *
 # from packet import *
 from threading import Thread
 from controller import CommsController
 # from messages import Test_Outbound
 import traceback
-
+from PyQt6.QtCore import QThreadPool
 
 
 def read_loop(cls: Packet, ser: Serial):
@@ -23,14 +23,19 @@ def read_loop(cls: Packet, ser: Serial):
             # ser.read_until(expected=start_tx)
             # print(cls.from_bytes(ser.read_until(expected=end_tx)).__repr__())
             print(ser.read_until(end_tx))
-            # print(ser.read(16))
+            # print(ser.read(1))
             # print(ser.read_until(b"bin_buffer"))
         except:
             pass
 
 
 def main():
-    comms = CommsController('COM4', baudrate=115200)
+    comms = CommsController('COM7', baudrate=115200)
+    # comms.outbound_thread.start()
+    # comms.inbound_thread.start()
+    tp = QThreadPool()
+    tp.start(comms.outbound_thread)
+    # tp.start(comms.inbound_thread)
     # read_thread = Thread(target = read_loop, args=[Packet, comms], daemon=True)
     # read_thread.start()
     while(True):
@@ -38,7 +43,7 @@ def main():
         # packet = Packet(100, serialize(spec, [89, 9.909]))
         # packet = Test_Outbound(float(89), float(9.09)).pack()
         
-        packet = MotorEnable(0).pack()
+        packet = MotorEnable(1).pack()
         comms.outbound.put(packet)
         # packet.write_to(comms)
         # # print(f'I printed: {packet.to_bytes()}')
@@ -47,13 +52,14 @@ def main():
         comms.outbound.put(packet)
         # packet.write_to(comms)
         # # print(f'I printed: {packet.to_bytes()}')
-        packet = Position(10).pack()
+        packet = Position(0).pack()
         comms.outbound.put(packet)
         # packet.write_to(comms)
         # # print(f'I printed: {packet.to_bytes()}')
         try:
             while(comms.inbound.empty() == False):
                 p = comms.inbound.get_nowait()
+                print(comms.inbound.qsize())
                 print_msg(p)
         except Exception as e:
             traceback.print_exc()

@@ -103,7 +103,7 @@ class Ui_TurntableControllerBase(object):
         self.label.setText(_translate("TurntableControllerBase", "Move By Fixed"))
         self.label_2.setText(_translate("TurntableControllerBase", "Move By Value"))
         self.sendCommand_button.setText(_translate("TurntableControllerBase", "Send Command"))
-        self.portName_lineEdit.setText(_translate("TurntableControllerBase", "COM4"))
+        self.portName_lineEdit.setText(_translate("TurntableControllerBase", "COM7"))
         self.label_3.setText(_translate("TurntableControllerBase", "Port Name"))
         self.connectionStatus_label.setText(_translate("TurntableControllerBase", "ConnectionStatus"))
         self.getPosition_button.setText(_translate("TurntableControllerBase", "Get Position"))

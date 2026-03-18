@@ -1,7 +1,8 @@
 from TurntableControllerBase import Ui_TurntableControllerBase
 from PyQt6 import QtWidgets
-from PyQt6.QtCore import QTimer
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QTimer, QThreadPool
+from PyQt6.QtCore import Qt, QObject
+from PyQt6.QtCore import pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QMainWindow
 from PyQt6.QtGui import QPalette, QColor
 import traceback
@@ -11,21 +12,25 @@ from threading import Thread
 
 from messages import MotorEnable, Position, MoveBy
 from packet import Packet
+from controller import Worker
 
 class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
+    incoming_message_signal: pyqtSignal
+    incoming_message_signal = pyqtSignal(str)
+    update_position_signal = pyqtSignal(int)
+
     def setup(self):
-        # Initialize Motor interface
-        self.motor_interface = None
-        try:
-            self.tryConnect()    
-        except:
-            traceback.print_exc()
-        self.incoming_message_timer = QTimer(self)
-        self.incoming_message_timer.setInterval(100)
-        self.incoming_message_timer.timeout.connect(self.incoming_message_handle)
+        
+        self.threadPool = QThreadPool()
+
+        self.incoming_message_signal.connect(self.setPlainText)
+        self.update_position_signal.connect(self.update_position_display)
+
+        self.incoming_message_worker = Worker()
+        self.incoming_message_worker.run = self.incoming_message_handle
 
         self.request_position_timer = QTimer(self)
-        self.request_position_timer.setInterval(1000)
+        self.request_position_timer.setInterval(500)
         self.request_position_timer.timeout.connect(self.request_position)
 
         self.tryConnect_button.clicked.connect(self.tryConnect)
@@ -37,10 +42,23 @@ class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
         self.degIndicator.setNumDigits(5)
         self.sendCommand_button.clicked.connect(self.sendCommand)
         self.closeConnection_button.clicked.connect(self.closeConnection)
+        
+        # Initialize Motor interface
+        self.motor_interface = None
+        try:
+            self.tryConnect()    
+        except:
+            traceback.print_exc()
 
-        self.incoming_message_timer.start()
-        # self.request_position_timer.start()
-    
+    @pyqtSlot(int)
+    def update_position_display(self, val: int):
+        self.deg100Indicator.display(val)
+        self.degIndicator.display(val/100.0)
+
+    @pyqtSlot(str)
+    def setPlainText(self, val: str):
+        self.incomingMessages_plainTxtEdit.setPlainText(val)
+
     def closeConnection(self):
         self.motor_interface.ser.close()
 
@@ -68,26 +86,39 @@ class Ui_TurntableControllerFull(Ui_TurntableControllerBase):
         self.motor_interface.outbound.put(Position(0).pack())
 
     def incoming_message_handle(self):
-        try:
-            if(self.motor_interface != None):
-                if(not self.motor_interface.inbound.empty()):
-                    p = self.motor_interface.inbound.get_nowait()
-                    self.handle_message(p)
-                    self.incomingMessages_plainTxtEdit.setPlainText(p.__repr__())
-        except:
-            traceback.print_exc()
-    
+        while True:
+            try:
+                if(self.motor_interface != None):
+                    if(not self.motor_interface.inbound.empty()):
+                        p = self.motor_interface.inbound.get_nowait()
+                        self.handle_message(p)
+                        # self.incoming_message_signal.emit(p.__repr__())
+            except:
+                traceback.print_exc()
+
     def handle_message(self, p: Packet):
         if p.id() == Position.id():
+            print("Received Position msg")
             msg = Position.from_pack(p)
-            self.degIndicator.display(msg.data/100.0)
-            self.deg100Indicator.display(msg.data)
+            self.update_position_signal.emit(msg.data)
+            # self.degIndicator.display(msg.data/100.0)
+            # self.deg100Indicator.display(msg.data)
+        else:
+            print(p)
 
     def tryConnect(self):
         try:
             # Get port name
             port_name = self.portName_lineEdit.text()
             self.motor_interface = MotorInterface(port_name, 115200)
+            # self.threadPool.start(self.motor_interface.inbound_thread)
+            # self.motor_interface.outbound_thread.start()
+            self.threadPool.start(self.motor_interface.outbound_thread)
+            self.threadPool.start(self.incoming_message_worker)
+            # self.threadPool.start(self.motor_interface.inbound_thread)
+            
+            # self.incoming_message_timer.start()
+            # self.request_position_timer.start()
             self.connectionStatus_label.setText("Connected!")
         except:
             self.connectionStatus_label.setText("Not Connected!")

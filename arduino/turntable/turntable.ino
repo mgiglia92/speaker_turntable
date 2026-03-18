@@ -400,7 +400,7 @@ void cycle_motor_control()
             motor_state.current_steps--;
         }
         // Convert steps to hundreths of a degree (so I dont need to send floats over comms protocol)
-        motor_state.current_deg_hundreths = (int32_t)((100.0 * motor_state.current_steps)/ (float)motor_config.steps_per_degree);
+        motor_state.current_deg_hundreths = (int32_t)((100.0 * motor_state.current_steps)/ (double)motor_config.steps_per_degree);
         return;
     }
 
@@ -495,12 +495,13 @@ void cycle_comms_state_machine()
             send_message(Ack, 1);
             // Send motor position (as steps for now) TODO: Change to deg, update deg in motor control cycle
             // TODO: Fix negative values for base64 encoding issue
-            // ITimer1.disableTimer();
+            ITimer1.disableTimer();
             // int32_t* pos = malloc(sizeof(int32_t));
             // *pos = motor_state.current_steps;
             send_message(Position, (uint32_t)motor_state.current_deg_hundreths);
+            // send_message(Position, (uint32_t)(-100));
             // free(pos);
-            // ITimer1.enableTimer();
+            ITimer1.enableTimer();
             break;
         }
         case EStop:
